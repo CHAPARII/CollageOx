@@ -7,6 +7,9 @@ A real-time campus community and operations platform with a completely original 
 Requires Node.js 24+ (SQLite is built into this Node release).
 
 ```bash
+npm install
+cp .env.example .env
+# Export the values from .env in your shell.
 npm start
 ```
 
@@ -14,14 +17,9 @@ Open `http://localhost:3000`.
 
 ## Owner access
 
-The single built-in owner identity requested for this deployment is:
+There is no built-in owner credential. On an empty database, set `OWNER_USERNAME`, `OWNER_INITIAL_PASSWORD`, and optionally `OWNER_EMAIL` and `OWNER_NAME`. Startup stops with a clear error if an empty database has no valid owner secret. The initial password must contain at least 10 characters and can be replaced after login through `POST /api/auth/password`.
 
-- Username: `Navi`
-- Password: `Ashish1315e@own`
-
-The source contains only a PBKDF2 password hash, never the plaintext password. The owner can remove any post, publish notices, view real platform metrics, and review/update all saved support issues.
-
-Change the owner password before sharing the source publicly. In a full production rollout, move owner bootstrap into a one-time deployment secret.
+Any owner password previously committed to this repository must be considered compromised and must never be reused.
 
 ## What works
 
@@ -51,11 +49,9 @@ npm start
 
 The API key stays on the server and is never sent to the browser. `POST /api/ai/assist` is authenticated and rate-limited. Nothing claims to be AI-moderated when no provider is connected.
 
-## Data and scale
+## Data
 
-The app uses SQLite with WAL mode, foreign keys, atomic transactions, indexes implied by unique/primary keys, and persistent sessions. This comfortably stores 10,000+ student accounts and is appropriate for an initial single-server campus launch.
-
-For heavy simultaneous usage across multiple application servers, move the same schema to managed PostgreSQL and use Redis pub/sub for cross-instance live events. SQLite is a single-host database; claiming otherwise would be misleading. Put the app behind HTTPS, use institutional SSO/email verification, add backups, and load-test against your expected peak concurrency before a campus-wide rollout.
+Local development uses SQLite by default. Production requires `DATABASE_URL` and uses PostgreSQL, so accounts, sessions, chat messages, posts, clubs, and all other records survive Render deploys and restarts. Versioned migrations run automatically at startup and are recorded in `schema_migrations`.
 
 ## Test
 
@@ -73,7 +69,14 @@ Docker:
 
 ```bash
 docker build -t collegeox .
-docker run -p 3000:3000 -v collegeox-data:/app/data collegeox
+docker run --env-file .env -p 3000:3000 collegeox
 ```
 
-The included `render.yaml` provisions a persistent disk and health check. Configure `NODE_ENV=production`, attach persistent storage, and optionally set `OPENAI_API_KEY` and `OPENAI_MODEL`.
+The included `render.yaml` keeps the web service on Render Free and does not attach a paid disk. In Render, add these secret environment variables before deploying:
+
+- `DATABASE_URL`: PostgreSQL connection string from your database provider
+- `OWNER_USERNAME` and `OWNER_INITIAL_PASSWORD`: used only if the database has no owner
+- `OWNER_EMAIL` and `OWNER_NAME`: optional owner details
+- `OPENAI_API_KEY` and `OPENAI_MODEL`: optional AI configuration
+
+Use an externally managed PostgreSQL database with backups. The database provider may have its own free-tier limits; changing the web service from SQLite to PostgreSQL does not upgrade the Render web service.
