@@ -28,6 +28,42 @@ CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
 CREATE INDEX IF NOT EXISTS idx_club_messages_club ON club_messages(club_id,created_at);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status,created_at DESC);
 `
+  },
+  {
+    version: 2,
+    name: 'feature_hardening',
+    sql: `
+CREATE TABLE IF NOT EXISTS saved_posts (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(user_id,post_id)
+);
+CREATE TABLE IF NOT EXISTS issue_messages (
+  id TEXT PRIMARY KEY,
+  issue_id TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+  author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  visibility TEXT NOT NULL DEFAULT 'public',
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS club_settings (
+  club_id TEXT PRIMARY KEY REFERENCES clubs(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'active',
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS role_audit (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  from_role TEXT NOT NULL,
+  to_role TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_saved_posts_user ON saved_posts(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_issue_messages_issue ON issue_messages(issue_id,created_at);
+CREATE INDEX IF NOT EXISTS idx_role_audit_user ON role_audit(user_id,created_at DESC);
+`
   }
 ];
 
@@ -38,7 +74,10 @@ async function applyMigrations(db) {
     if (applied.has(migration.version)) continue;
     await db.transaction(async transaction => {
       await transaction.exec(migration.sql);
-      await transaction.run('INSERT INTO schema_migrations (version,name,applied_at) VALUES (?,?,?)', [migration.version, migration.name, new Date().toISOString()]);
+      await transaction.run(
+        'INSERT INTO schema_migrations (version,name,applied_at) VALUES (?,?,?)',
+        [migration.version, migration.name, new Date().toISOString()]
+      );
     });
   }
 }
