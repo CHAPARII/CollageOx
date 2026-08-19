@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f6f5ef">
   <meta name="description" content="College Ox — the shared space for campus life."><title>College Ox · Campus, together</title>
-  <link rel="manifest" href="/manifest.json"><link rel="stylesheet" href="/styles.css">
+  <link rel="manifest" href="/manifest.json"><link rel="stylesheet" href="/styles.css?v=3">
 </head>
 <body>
   <div id="toasts" class="toasts" aria-live="polite"></div>
@@ -86,6 +86,6 @@
   <dialog id="club-chat-dialog" class="dialog club-chat-dialog"><div class="dialog-card"><header><div><span class="kicker">Club room · Live</span><h3 id="club-chat-name">Club chat</h3></div><button type="button" class="dialog-close" data-close="club-chat-dialog" aria-label="Close chat">×</button></header><div id="club-chat-messages" class="club-chat-messages" aria-live="polite"></div><form id="club-chat-form" class="club-chat-form"><label class="sr-only" for="club-chat-input">Message</label><input id="club-chat-input" required maxlength="1000" autocomplete="off" placeholder="Message your club…"><button class="button primary" type="submit">Send →</button></form></div></dialog>
 
   <dialog id="logout-dialog" class="dialog confirm-dialog"><div class="dialog-card"><button class="dialog-close" data-close="logout-dialog">×</button><div class="confirm-icon">↗</div><h3>Heading out?</h3><p>You’ll be signed out on this device. Everything you created stays right where it is.</p><div class="confirm-actions"><button class="button ghost" data-close="logout-dialog">Stay here</button><button class="button danger" id="confirm-logout">Sign out</button></div></div></dialog>
-  <script src="/app.js" defer></script>
+  <script src="/app.js?v=3" defer></script>
 </body>
 </html>
