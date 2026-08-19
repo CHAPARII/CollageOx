@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: collegeox
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_FILE
+        value: /var/data/collegeox.db
+    disk:
+      name: collegeox-data
+      mountPath: /var/data
+      sizeGB: 1

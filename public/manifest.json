@@ -1,0 +1,10 @@
+{
+  "name": "College Ox",
+  "short_name": "College Ox",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090b11",
+  "theme_color": "#090b11",
+  "description": "One intelligent workspace for your entire campus.",
+  "icons": []
+}

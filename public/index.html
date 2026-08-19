@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f6f5ef">
+  <meta name="description" content="College Ox — the shared space for campus life."><title>College Ox · Campus, together</title>
+  <link rel="manifest" href="/manifest.json"><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <main id="auth" class="auth">
+    <section class="auth-art">
+      <a class="wordmark" href="#"><span class="logo">OX</span><span>College Ox</span></a>
+      <div class="art-copy"><span class="kicker">Your campus, in one place</span><h1>People make<br>college <i>matter.</i></h1><p>Find collaborators, start communities, share what you know, and stay close to everything happening around you.</p></div>
+      <div class="notice-board" aria-hidden="true">
+        <div class="paper paper-a"><b>Find your people.</b><span>Projects · Clubs · Ideas</span></div>
+        <div class="paper paper-b"><span class="scribble">↗</span><b>Build in public</b></div>
+        <div class="paper paper-c"><b>Campus is better<br>when it talks.</b></div>
+        <div class="tape"></div><div class="pin"></div>
+      </div>
+      <small>Private campus community · Human-first by design</small>
+    </section>
+    <section class="auth-form-wrap">
+      <div class="auth-form-card">
+        <div class="mobile-wordmark wordmark"><span class="logo">OX</span><span>College Ox</span></div>
+        <div id="auth-heading"><span class="kicker">Welcome</span><h2>Come on in.</h2><p>Sign in with your username or campus email.</p></div>
+        <div class="auth-tabs"><button class="active" data-auth-tab="login">Sign in</button><button data-auth-tab="register">Create account</button></div>
+        <form id="login-form">
+          <label>Username or email<input id="login-id" autocomplete="username" required placeholder="your.name"></label>
+          <label>Password<div class="password-field"><input id="login-password" type="password" autocomplete="current-password" required placeholder="Your password"><button type="button" data-toggle-password="login-password" aria-label="Show password">Show</button></div></label>
+          <button class="button primary wide" type="submit">Sign in <span>→</span></button>
+        </form>
+        <form id="register-form" hidden>
+          <label>Full name<input id="register-name" autocomplete="name" required placeholder="What should people call you?"></label>
+          <label>Username<input id="register-username" autocomplete="username" pattern="[A-Za-z0-9_.]{3,24}" required placeholder="your.name"></label>
+          <label>Campus email<input id="register-email" type="email" autocomplete="email" required placeholder="you@college.edu"></label>
+          <label>Password<div class="password-field"><input id="register-password" type="password" minlength="10" autocomplete="new-password" required placeholder="10+ characters"><button type="button" data-toggle-password="register-password">Show</button></div></label>
+          <button class="button primary wide" type="submit">Create my space <span>→</span></button>
+        </form>
+        <p class="terms">By joining, you agree to your institution’s community and privacy policies.</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="app" class="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head"><a class="wordmark" href="#feed" data-route="feed"><span class="logo">OX</span><span>College Ox</span></a><button class="icon-button sidebar-close" data-sidebar-close aria-label="Close menu">×</button></div>
+      <nav id="nav">
+        <span class="nav-label">Campus</span>
+        <button class="active" data-route="feed"><i>⌂</i><span>Live feed</span><b class="live-dot"></b></button>
+        <button data-route="people"><i>⌕</i><span>Find people</span></button>
+        <button data-route="projects"><i>◇</i><span>Projects</span></button>
+        <button data-route="clubs"><i>◎</i><span>Clubs</span></button>
+        <button data-route="events"><i>□</i><span>Events</span></button>
+        <button data-route="announcements"><i>△</i><span>Notices</span></button>
+        <span class="nav-label">You</span>
+        <button data-route="profile"><i>◉</i><span>My profile</span></button>
+        <button data-route="help"><i>?</i><span>Help & issues</span></button>
+        <button data-route="admin" class="admin-only"><i>✦</i><span>Owner console</span></button>
+      </nav>
+      <div class="ai-status" id="ai-status"><span class="ai-glyph">✦</span><div><b>AI tools</b><small>Checking configuration…</small></div></div>
+      <button class="account-chip" id="account-chip"></button>
+    </aside>
+    <section class="shell">
+      <header class="topbar">
+        <button class="icon-button menu-button" id="menu-button" aria-label="Open menu">☰</button>
+        <div class="route-title"><span id="route-eyebrow">Live now</span><b id="route-title">Campus feed</b></div>
+        <form class="global-search" id="global-search"><span>⌕</span><input id="global-search-input" placeholder="Search students…"><kbd>⌘K</kbd></form>
+        <button class="button create-button" id="create-button"><span>＋</span> Create</button>
+      </header>
+      <main id="view" class="view"></main>
+      <nav class="bottom-nav"><button class="active" data-route="feed"><i>⌂</i><span>Feed</span></button><button data-route="people"><i>⌕</i><span>People</span></button><button class="bottom-create" id="bottom-create">＋</button><button data-route="clubs"><i>◎</i><span>Clubs</span></button><button data-route="profile"><i>◉</i><span>You</span></button></nav>
+    </section>
+  </div>
+
+  <dialog id="create-menu" class="dialog compact-dialog"><div class="dialog-card"><header><div><span class="kicker">Make something</span><h3>Create</h3></div><button class="dialog-close" data-close="create-menu" aria-label="Close">×</button></header><div class="create-grid"><button data-open="post-dialog"><i>✎</i><b>Post</b><span>Share with campus</span></button><button data-open="project-dialog"><i>◇</i><b>Project</b><span>Find teammates</span></button><button data-open="club-dialog"><i>◎</i><b>Club</b><span>Gather your people</span></button><button data-open="event-dialog"><i>□</i><b>Event</b><span>Put it on campus</span></button><button data-open="announcement-dialog" class="staff-create"><i>△</i><b>Notice</b><span>Official update</span></button><button data-route-modal="help"><i>?</i><b>Issue</b><span>Ask for help</span></button></div></div></dialog>
+
+  <dialog id="post-dialog" class="dialog"><form class="dialog-card" id="post-form"><header><div><span class="kicker">Live feed</span><h3>Start a conversation</h3></div><button type="button" class="dialog-close" data-close="post-dialog">×</button></header><div id="composer-person" class="person-row"></div><textarea id="post-body" maxlength="1800" required placeholder="What’s happening on campus?"></textarea><div class="post-types"><button type="button" class="active" data-post-type="post">Post</button><button type="button" data-post-type="question">Question</button><button type="button" data-post-type="collab">Collaboration</button><button type="button" data-post-type="update">Update</button></div><label>Topics<input id="post-tags" placeholder="Design, Coding, CampusLife"></label><div class="ai-composer"><button type="button" id="ai-rewrite">✦ Improve with AI</button><span id="ai-composer-state">Uses the configured server AI</span></div><footer><span id="post-count">0 / 1800</span><button class="button primary" type="submit">Publish now →</button></footer></form></dialog>
+
+  <dialog id="profile-dialog" class="dialog"><form class="dialog-card profile-editor" id="profile-form"><header><div><span class="kicker">Make it yours</span><h3>Edit profile</h3></div><button type="button" class="dialog-close" data-close="profile-dialog">×</button></header><div class="avatar-editor"><button type="button" id="avatar-preview" class="avatar avatar-xl">＋</button><div><b>Profile photo</b><span>JPG, PNG or WebP under 450 KB</span><label class="file-label">Choose image<input id="profile-avatar" type="file" accept="image/png,image/jpeg,image/webp"></label><button type="button" class="text-button" id="remove-avatar">Remove</button></div></div><div class="two-fields"><label>Name<input id="profile-name" required></label><label>Username<input id="profile-username" required pattern="[A-Za-z0-9_.]{3,24}"></label></div><label>Bio<textarea id="profile-bio" maxlength="300" placeholder="What should campus know about you?"></textarea></label><div class="two-fields"><label>Department<input id="profile-department"></label><label>Year / role<input id="profile-year"></label><label>Pronouns<input id="profile-pronouns"></label><label>Location<input id="profile-location"></label></div><div class="two-fields"><label>Accent color<input id="profile-accent" type="color"></label><label>Visibility<select id="profile-visibility"><option value="campus">Campus</option><option value="private">Private</option></select></label></div><label>Interests <small>comma separated</small><input id="profile-interests" placeholder="Robotics, Music, UI Design"></label><label>Links <small>one full URL per line</small><textarea id="profile-links" placeholder="https://github.com/you"></textarea></label><footer><span>Every field can be changed later.</span><button class="button primary" type="submit">Save profile</button></footer></form></dialog>
+
+  <dialog id="project-dialog" class="dialog entity-dialog"><form class="dialog-card" id="project-form"><header><div><span class="kicker">Build together</span><h3>New project</h3></div><button type="button" class="dialog-close" data-close="project-dialog">×</button></header><label>Project name<input id="project-name" required maxlength="80"></label><label>The pitch<textarea id="project-pitch" required maxlength="600" placeholder="What are you building and why does it matter?"></textarea></label><label>Skills needed<input id="project-skills" placeholder="React, Research, UI Design"></label><label>Team capacity<input id="project-capacity" type="number" min="2" max="30" value="4"></label><footer><span>You’ll join as the first member.</span><button class="button primary" type="submit">Create project</button></footer></form></dialog>
+  <dialog id="club-dialog" class="dialog entity-dialog"><form class="dialog-card" id="club-form"><header><div><span class="kicker">Community</span><h3>Start a club</h3></div><button type="button" class="dialog-close" data-close="club-dialog">×</button></header><label>Club name<input id="club-name" required maxlength="80"></label><label>Description<textarea id="club-description" required maxlength="500"></textarea></label><div class="two-fields"><label>Category<input id="club-category" placeholder="Technology"></label><label>Color<input id="club-accent" type="color" value="#ff6b4a"></label></div><footer><span>You’ll be the club owner.</span><button class="button primary" type="submit">Create club</button></footer></form></dialog>
+  <dialog id="event-dialog" class="dialog entity-dialog"><form class="dialog-card" id="event-form"><header><div><span class="kicker">Bring people together</span><h3>New event</h3></div><button type="button" class="dialog-close" data-close="event-dialog">×</button></header><label>Event title<input id="event-title" required maxlength="100"></label><label>Description<textarea id="event-description" maxlength="800"></textarea></label><div class="two-fields"><label>Starts at<input id="event-start" type="datetime-local" required></label><label>Capacity<input id="event-capacity" type="number" min="2" max="5000" value="100"></label></div><label>Location<input id="event-location" maxlength="120" placeholder="Building, room or online link"></label><footer><span>You’ll be marked as attending.</span><button class="button primary" type="submit">Publish event</button></footer></form></dialog>
+  <dialog id="announcement-dialog" class="dialog entity-dialog"><form class="dialog-card" id="announcement-form"><header><div><span class="kicker">Official update</span><h3>Publish notice</h3></div><button type="button" class="dialog-close" data-close="announcement-dialog">×</button></header><label>Title<input id="announcement-title" required maxlength="120"></label><label>Message<textarea id="announcement-body" required maxlength="1000"></textarea></label><label>Audience<select id="announcement-audience"><option>Everyone</option><option>Students</option><option>Faculty</option></select></label><footer><span>Published immediately.</span><button class="button primary" type="submit">Publish notice</button></footer></form></dialog>
+
+  <dialog id="logout-dialog" class="dialog confirm-dialog"><div class="dialog-card"><button class="dialog-close" data-close="logout-dialog">×</button><div class="confirm-icon">↗</div><h3>Heading out?</h3><p>You’ll be signed out on this device. Everything you created stays right where it is.</p><div class="confirm-actions"><button class="button ghost" data-close="logout-dialog">Stay here</button><button class="button danger" id="confirm-logout">Sign out</button></div></div></dialog>
+  <script src="/app.js" defer></script>
+</body>
+</html>
