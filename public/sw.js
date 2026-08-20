@@ -1,4 +1,4 @@
-const CACHE = 'collegeox-v3-pr8-v3';
+const CACHE = 'collegeox-v3-pr9-v1';
 const SHELL = [
   '/',
   '/styles.css?v=3&build=pr8',
@@ -9,6 +9,8 @@ const SHELL = [
   '/pr8.js?v=1',
   '/pr8-fixes.js?v=1',
   '/pr8-complete.js?v=1',
+  '/pr9-cleanup.css?v=1',
+  '/pr9-cleanup.js?v=1',
   '/manifest.json',
   '/icon.svg'
 ];
@@ -43,7 +45,7 @@ self.addEventListener('fetch', event => {
 function pushUrl(payload) {
   const kind = String(payload.kind || '');
   const entityId = encodeURIComponent(String(payload.entityId || ''));
-  if (kind === 'dm_message') return '/#messages';
+  if (kind === 'dm_message') return '/';
   if (kind === 'mention' && entityId) return `/?post=${entityId}`;
   if (kind.startsWith('project_')) return '/#projects';
   if (kind.startsWith('club_')) return '/#clubs';
