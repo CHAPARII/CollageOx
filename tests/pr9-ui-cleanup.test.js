@@ -37,6 +37,12 @@ test('desktop sidebar can scroll independently', () => {
   assert.match(css, /overflow-x\s*:\s*hidden/);
 });
 
+test('people directory search keeps typed text visible on the white field', () => {
+  const css = read('public/pr9-cleanup.css');
+  assert.match(css, /\.people-search input\s*\{[^}]*color\s*:\s*var\(--ink\)/);
+  assert.match(css, /caret-color\s*:\s*var\(--ink\)/);
+});
+
 test('service worker caches cleanup assets and no longer routes DM pushes to Messages', () => {
   const source = read('public/sw.js');
   assert.match(source, /pr9-cleanup\.css\?v=1/);
