@@ -4,8 +4,8 @@
   "private": true,
   "description": "A unified social and operations platform for modern campuses.",
   "scripts": {
-    "start": "node -r ./src/runtime-enhancements.js -r ./src/static-enhancements.js server.js",
-    "dev": "node --watch -r ./src/runtime-enhancements.js -r ./src/static-enhancements.js server.js",
+    "start": "node -r ./src/runtime-enhancements.js -r ./src/pr8/index.js -r ./src/static-enhancements.js server.js",
+    "dev": "node --watch -r ./src/runtime-enhancements.js -r ./src/pr8/index.js -r ./src/static-enhancements.js server.js",
     "test": "node --test tests/*.test.js"
   },
   "engines": {
