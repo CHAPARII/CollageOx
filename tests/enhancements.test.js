@@ -13,6 +13,7 @@ process.env.OWNER_EMAIL = 'owner@college.edu';
 process.env.OWNER_NAME = 'Enh Owner';
 
 require('../src/runtime-enhancements');
+require('../src/pr8');
 const { enhancedIndex } = require('../src/static-enhancements');
 const { server, db, ready } = require('../server');
 
@@ -73,8 +74,8 @@ test('enhanced production shell adds readable assets and a new cache-busted app 
   const html = enhancedIndex();
   assert.match(html, /enhancements\.css\?v=1/);
   assert.match(html, /enhancements\.js\?v=1/);
-  assert.match(html, /app\.js\?v=3&build=pr6/);
-  assert.match(html, /styles\.css\?v=3&build=pr6/);
+  assert.match(html, /app\.js\?v=3&build=pr8/);
+  assert.match(html, /styles\.css\?v=3&build=pr8/);
 });
 
 test('likes and follows create notifications', async () => {
@@ -87,10 +88,16 @@ test('likes and follows create notifications', async () => {
   });
   assert.equal(result.response.status, 201);
   const postId = result.data.post.id;
+  assert.equal(await db.get('SELECT 1 FROM reactions WHERE post_id=? AND user_id=?', [postId, second.user.id]), null);
   result = await request(`/api/posts/${postId}/react`, { method: 'POST', headers: { cookie: second.cookie, 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(result.response.status, 200);
+  assert.ok(await db.get('SELECT 1 FROM reactions WHERE post_id=? AND user_id=?', [postId, second.user.id]));
+  const likeNotification = await db.get("SELECT id,actor_id,entity_id FROM notifications WHERE user_id=? AND kind='like'", [first.user.id]);
+  assert.ok(likeNotification, JSON.stringify(await db.all('SELECT user_id,actor_id,kind,entity_id FROM notifications ORDER BY created_at')));
   result = await request(`/api/users/${first.user.id}/follow`, { method: 'POST', headers: { cookie: second.cookie, 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(result.response.status, 200);
+  const directNotifications = await db.all('SELECT user_id,actor_id,kind,entity_id FROM notifications WHERE user_id=? ORDER BY created_at', [first.user.id]);
+  assert.deepEqual(new Set(directNotifications.map(item => item.kind)), new Set(['like', 'follow']), JSON.stringify(directNotifications));
   result = await request('/api/notifications', { headers: { cookie: first.cookie } });
   assert.equal(result.response.status, 200);
   assert.equal(result.data.unread, 2);
