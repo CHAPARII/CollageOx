@@ -1,6 +1,29 @@
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={user:null,data:null,route:'feed',postType:'post',feedScope:'all',stream:null,refreshTimer:null,avatarDraft:'',profile:null,clubChat:null};
-const routeMeta={feed:['Live now','Campus feed'],people:['Discover','Find people'],projects:['Build together','Projects'],clubs:['Belong somewhere','Clubs'],events:['Show up','Events'],announcements:['Official','Notices'],profile:['Your corner','Profile'],help:['Support','Help & issues'],admin:['Owner access','Command room']};
+const state={
+  user:null,
+  data:{posts:[],projects:[],clubs:[],events:[],announcements:[],counts:{people:0,posts:0,clubs:0},aiEnabled:false},
+  route:'feed',
+  postType:'post',
+  feedScope:'all',
+  feedNextCursor:null,
+  stream:null,
+  refreshTimer:null,
+  fallbackTimer:null,
+  avatarDraft:'',
+  profile:null,
+  clubChat:null
+};
+const routeMeta={
+  feed:['Live now','Campus feed'],
+  people:['Discover','Find people'],
+  projects:['Build together','Projects'],
+  clubs:['Belong somewhere','Clubs'],
+  events:['Show up','Events'],
+  announcements:['Official','Notices'],
+  profile:['Your corner','Profile'],
+  help:['Support','Help & issues'],
+  admin:['Owner access','Command room']
+};
 const esc=(v='')=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=u=>(u?.name||u?.username||'?').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
 const ago=d=>{const s=Math.max(1,(Date.now()-new Date(d))/1000);return s<60?'now':s<3600?`${Math.floor(s/60)}m`:s<86400?`${Math.floor(s/3600)}h`:`${Math.floor(s/86400)}d`};
@@ -8,82 +31,278 @@ const formatDate=d=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',ho
 async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'Something went wrong.');return data}
 function toast(message,type='success'){const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=message;$('#toasts').append(el);setTimeout(()=>el.remove(),3500)}
 function avatar(user,size=''){const img=user?.avatar?`<img src="${esc(user.avatar)}" alt="">`:esc(initials(user));return `<span class="avatar ${size}" style="--accent:${esc(user?.accent||'#155eef')}">${img}</span>`}
-function person(user,size=''){return `<div class="person-row" data-profile="${esc(user.username)}">${avatar(user,size)}<div><b>${esc(user.name)} ${user.role==='owner'?'<span class="role-badge">Owner</span>':''}</b><span>@${esc(user.username)}${user.department?` · ${esc(user.department)}`:''}</span></div></div>`}
+function roleBadge(role){return role==='owner'?'<span class="role-badge">Owner</span>':role==='management'?'<span class="role-badge">Management</span>':role==='faculty'?'<span class="role-badge">Faculty</span>':''}
+function person(user,size=''){return `<div class="person-row" data-profile="${esc(user.username)}">${avatar(user,size)}<div><b>${esc(user.name)} ${roleBadge(user.role)}</b><span>@${esc(user.username)}${user.department?` · ${esc(user.department)}`:''}</span></div></div>`}
 function empty(icon,title,text,action='',open=''){const target=open?.startsWith('route:')?`data-route="${open.slice(6)}"`:open?`data-open="${open}"`:'';return `<section class="empty surface"><div><div class="empty-icon">${icon}</div><h3>${title}</h3><p>${text}</p>${action?`<button class="button primary" ${target}>${action}</button>`:''}</div></section>`}
 function pageHead(kicker,title,text,button='',open=''){return `<header class="page-head"><div><span class="kicker">${kicker}</span><h1>${title}</h1><p>${text}</p></div>${button?`<button class="button" ${open?`data-open="${open}"`:''}>${button}</button>`:''}</header>`}
 
-async function init(){bindStatic();try{const me=await api('/api/me');if(me.user)await enter(me.user);else showAuth()}catch{showAuth()}}
-function showAuth(message=''){state.stream?.close();$('#app').hidden=true;$('#auth').hidden=false;if(message){$('#auth-heading').innerHTML=`<span class="kicker">Signed out</span><h2>See you around.</h2><p>${esc(message)}</p>`}}
-async function enter(user){state.user=user;$('#auth').hidden=true;$('#app').hidden=false;$('.admin-only').hidden=!['owner','management'].includes(user.role);$('.staff-create').hidden=!['owner','management','faculty'].includes(user.role);updateAccount();await refresh(false);openStream();navigate(location.hash.slice(1)||'feed')}
+async function init(){
+  bindStatic();
+  try{
+    const me=await api('/api/me');
+    if(me.user){
+      await enter(me.user);
+      const postId=new URLSearchParams(location.search).get('post');
+      if(postId)await showPermalink(postId);
+    }else showAuth();
+  }catch{showAuth()}
+}
+function showAuth(message=''){state.stream?.close();clearInterval(state.fallbackTimer);$('#app').hidden=true;$('#auth').hidden=false;if(message)$('#auth-heading').innerHTML=`<span class="kicker">Signed out</span><h2>See you around.</h2><p>${esc(message)}</p>`}
+async function enter(user){
+  state.user=user;
+  $('#auth').hidden=true;
+  $('#app').hidden=false;
+  $('.admin-only').hidden=!['owner','management'].includes(user.role);
+  $('.staff-create').hidden=!['owner','management','faculty'].includes(user.role);
+  updateAccount();
+  await refresh(false);
+  openStream();
+  await navigate(location.hash.slice(1)||'feed');
+}
 function updateAccount(){$('#account-chip').innerHTML=`${avatar(state.user,'avatar-sm')}<div><b>${esc(state.user.name)}</b><span>@${esc(state.user.username)}</span></div>`;$('#composer-person').innerHTML=person(state.user)}
-async function refresh(renderNow=true){state.data=await api('/api/bootstrap');state.user=state.data.user;updateAccount();const ai=$('#ai-status');ai.classList.toggle('enabled',state.data.aiEnabled);$('small',ai).textContent=state.data.aiEnabled?'Connected and ready':'Off until an API key is added';if(renderNow)render()}
-function openStream(){state.stream?.close();state.stream=new EventSource('/api/stream');['post','deletePost','reaction','comment','project','club','event','announcement','follow','profile','issue'].forEach(name=>state.stream.addEventListener(name,()=>{clearTimeout(state.refreshTimer);state.refreshTimer=setTimeout(()=>refresh(true).catch(()=>{}),250)}));state.stream.addEventListener('clubMessage',event=>{try{const update=JSON.parse(event.data);if(state.clubChat===update.clubId&&$('#club-chat-dialog').open)loadClubChat(update.clubId).catch(()=>{})}catch{}});}
+async function refresh(renderNow=true){
+  const base=await api('/api/bootstrap?summary=1');
+  state.user=base.user;
+  state.data.counts=base.counts;
+  state.data.aiEnabled=base.aiEnabled;
+  if(!state.data.announcements.length)state.data.announcements=base.announcements||[];
+  updateAccount();
+  $('.admin-only').hidden=!['owner','management'].includes(state.user.role);
+  $('.staff-create').hidden=!['owner','management','faculty'].includes(state.user.role);
+  const ai=$('#ai-status');
+  ai.classList.toggle('enabled',state.data.aiEnabled);
+  $('small',ai).textContent=state.data.aiEnabled?'Connected and ready':'Off until an API key is added';
+  if(renderNow)await refreshCurrent();
+}
+async function refreshCurrent(){
+  if(['feed','projects','clubs','events','announcements'].includes(state.route))await loadRouteData(state.route);
+  if(state.route==='help')return renderHelp();
+  if(state.route==='admin')return renderAdmin();
+  if(state.route==='profile')return renderProfile(state.user.username,true);
+  render();
+}
+function openStream(){
+  state.stream?.close();
+  clearInterval(state.fallbackTimer);
+  state.stream=new EventSource('/api/stream');
+  const schedule=()=>{clearTimeout(state.refreshTimer);state.refreshTimer=setTimeout(()=>refreshCurrent().catch(()=>{}),300)};
+  ['post','deletePost','reaction','comment','project','club','event','announcement','follow','profile','issue'].forEach(name=>state.stream.addEventListener(name,schedule));
+  state.stream.addEventListener('clubMessage',event=>{try{const update=JSON.parse(event.data);if(state.clubChat===update.clubId&&$('#club-chat-dialog').open)loadClubChat(update.clubId).catch(()=>{})}catch{}});
+  state.stream.onopen=()=>{clearInterval(state.fallbackTimer);state.fallbackTimer=null};
+  state.stream.onerror=()=>{if(!state.fallbackTimer)state.fallbackTimer=setInterval(()=>refreshCurrent().catch(()=>{}),30000)};
+}
 
 function bindStatic(){
   $$('[data-auth-tab]').forEach(b=>b.onclick=()=>{$$('[data-auth-tab]').forEach(x=>x.classList.toggle('active',x===b));$('#login-form').hidden=b.dataset.authTab!=='login';$('#register-form').hidden=b.dataset.authTab!=='register'});
   $$('[data-toggle-password]').forEach(b=>b.onclick=()=>{const input=$(`#${b.dataset.togglePassword}`);input.type=input.type==='password'?'text':'password';b.textContent=input.type==='password'?'Show':'Hide'});
-  $('#login-form').onsubmit=login;$('#register-form').onsubmit=register;
-  $$('[data-route]').forEach(b=>b.onclick=e=>{e.preventDefault();navigate(b.dataset.route)});$('#menu-button').onclick=()=>$('#sidebar').classList.add('open');$('[data-sidebar-close]').onclick=()=>$('#sidebar').classList.remove('open');
-  $('#create-button').onclick=$('#bottom-create').onclick=()=>openDialog('create-menu');$('#account-chip').onclick=()=>navigate('profile');
+  $('#login-form').onsubmit=login;
+  $('#register-form').onsubmit=register;
+  $$('[data-route]').forEach(b=>b.onclick=e=>{e.preventDefault();navigate(b.dataset.route)});
+  $('#menu-button').onclick=()=>$('#sidebar').classList.add('open');
+  $('[data-sidebar-close]').onclick=()=>$('#sidebar').classList.remove('open');
+  $('#create-button').onclick=$('#bottom-create').onclick=()=>openDialog('create-menu');
+  $('#account-chip').onclick=()=>navigate('profile');
   $$('[data-close]').forEach(b=>b.onclick=e=>{e.preventDefault();$(`#${b.dataset.close}`).close()});
-  $$('[data-open]').forEach(b=>b.onclick=()=>{closeDialog('create-menu');openDialog(b.dataset.open)});$$('[data-route-modal]').forEach(b=>b.onclick=()=>{closeDialog('create-menu');navigate(b.dataset.routeModal)});
+  $$('[data-open]').forEach(b=>b.onclick=()=>{closeDialog('create-menu');openDialog(b.dataset.open)});
+  $$('[data-route-modal]').forEach(b=>b.onclick=()=>{closeDialog('create-menu');navigate(b.dataset.routeModal)});
   $$('.dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d)d.close()}));
   $$('[data-post-type]').forEach(b=>b.onclick=()=>{$$('[data-post-type]').forEach(x=>x.classList.toggle('active',x===b));state.postType=b.dataset.postType});
-  $('#post-body').oninput=e=>$('#post-count').textContent=`${e.target.value.length} / 1800`;$('#ai-rewrite').onclick=aiRewrite;
-  $('#post-form').onsubmit=createPost;$('#profile-form').onsubmit=saveProfile;$('#project-form').onsubmit=e=>createEntity(e,'projects',{name:$('#project-name').value,pitch:$('#project-pitch').value,skills:$('#project-skills').value.split(',').map(x=>x.trim()).filter(Boolean),capacity:$('#project-capacity').value},'project-dialog','Project created.','projects');
+  $('#post-body').oninput=e=>$('#post-count').textContent=`${e.target.value.length} / 1800`;
+  $('#ai-rewrite').onclick=aiRewrite;
+  $('#post-form').onsubmit=createPost;
+  $('#profile-form').onsubmit=saveProfile;
+  $('#project-form').onsubmit=e=>createEntity(e,'projects',{name:$('#project-name').value,pitch:$('#project-pitch').value,skills:$('#project-skills').value.split(',').map(x=>x.trim()).filter(Boolean),capacity:$('#project-capacity').value},'project-dialog','Project created.','projects');
   $('#club-form').onsubmit=e=>createEntity(e,'clubs',{name:$('#club-name').value,description:$('#club-description').value,category:$('#club-category').value,accent:$('#club-accent').value},'club-dialog','Club created.','clubs');
   $('#event-form').onsubmit=e=>createEntity(e,'events',{title:$('#event-title').value,description:$('#event-description').value,startsAt:$('#event-start').value,location:$('#event-location').value,capacity:$('#event-capacity').value},'event-dialog','Event published.','events');
   $('#announcement-form').onsubmit=e=>createEntity(e,'announcements',{title:$('#announcement-title').value,body:$('#announcement-body').value,audience:$('#announcement-audience').value},'announcement-dialog','Notice published.','announcements');
   $('#club-chat-form').onsubmit=sendClubMessage;
-  $('#profile-avatar').onchange=readAvatar;$('#avatar-preview').onclick=()=>$('#profile-avatar').click();$('#remove-avatar').onclick=()=>{state.avatarDraft='';renderAvatarPreview()};$('#confirm-logout').onclick=logout;
-  $('#global-search').onsubmit=e=>{e.preventDefault();navigate('people');setTimeout(()=>{$('#people-q').value=$('#global-search-input').value;searchPeople($('#global-search-input').value)},0)};
+  $('#profile-avatar').onchange=readAvatar;
+  $('#avatar-preview').onclick=()=>$('#profile-avatar').click();
+  $('#remove-avatar').onclick=()=>{state.avatarDraft='';renderAvatarPreview()};
+  $('#confirm-logout').onclick=logout;
+  $('#global-search').onsubmit=e=>{e.preventDefault();navigate('people').then(()=>{if($('#people-q')){$('#people-q').value=$('#global-search-input').value;searchPeople($('#global-search-input').value)}})};
   document.onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#global-search-input').focus()}if(e.key==='Escape')$('#sidebar').classList.remove('open')};
   if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 }
 async function login(e){e.preventDefault();const btn=$('button[type=submit]',e.currentTarget);btn.disabled=true;try{const r=await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#login-id').value,password:$('#login-password').value})});await enter(r.user)}catch(err){toast(err.message,'error')}finally{btn.disabled=false}}
 async function register(e){e.preventDefault();const btn=$('button[type=submit]',e.currentTarget);btn.disabled=true;try{const r=await api('/api/auth/register',{method:'POST',body:JSON.stringify({name:$('#register-name').value,username:$('#register-username').value,email:$('#register-email').value,password:$('#register-password').value})});await enter(r.user);toast('Your campus space is ready.')}catch(err){toast(err.message,'error')}finally{btn.disabled=false}}
-async function logout(){try{await api('/api/auth/logout',{method:'POST'});closeDialog('logout-dialog');state.user=null;state.data=null;showAuth('You have been signed out safely.')}catch(err){toast(err.message,'error')}}
-function openDialog(id){const d=$(`#${id}`);if(d&&!d.open)d.showModal()}function closeDialog(id){const d=$(`#${id}`);if(d?.open)d.close()}
-function navigate(route){if(route==='admin'&&!['owner','management'].includes(state.user.role)){toast('Owner or management access required.','error');return}state.route=route;location.hash=route;const meta=routeMeta[route]||routeMeta.feed;$('#route-eyebrow').textContent=meta[0];$('#route-title').textContent=meta[1];$$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));$('#sidebar').classList.remove('open');render();scrollTo({top:0})}
-function render(){if(!state.data)return;const map={feed:renderFeed,people:renderPeople,projects:renderProjects,clubs:renderClubs,events:renderEvents,announcements:renderNotices,profile:()=>renderProfile(state.user.username,true),help:renderHelp,admin:renderAdmin};(map[state.route]||map.feed)()}
+async function logout(){try{await api('/api/auth/logout',{method:'POST'});closeDialog('logout-dialog');state.user=null;showAuth('You have been signed out safely.')}catch(err){toast(err.message,'error')}}
+function openDialog(id){const d=$(`#${id}`);if(d&&!d.open)d.showModal()}
+function closeDialog(id){const d=$(`#${id}`);if(d?.open)d.close()}
+async function navigate(route){
+  if(route==='admin'&&!['owner','management'].includes(state.user.role)){toast('Owner or management access required.','error');return}
+  state.route=route;
+  location.hash=route;
+  const meta=routeMeta[route]||routeMeta.feed;
+  $('#route-eyebrow').textContent=meta[0];
+  $('#route-title').textContent=meta[1];
+  $$('[data-route]').forEach(b=>b.classList.toggle('active',b.dataset.route===route));
+  $('#sidebar').classList.remove('open');
+  $('#view').innerHTML='<div class="empty surface"><div><p>Loading…</p></div></div>';
+  await loadRouteData(route);
+  render();
+  scrollTo({top:0});
+}
+async function loadRouteData(route){
+  if(route==='feed')return loadFeed(true);
+  if(route==='projects'){state.data.projects=(await api('/api/projects')).projects;return}
+  if(route==='clubs'){state.data.clubs=(await api('/api/clubs')).clubs;return}
+  if(route==='events'){state.data.events=(await api('/api/events')).events;return}
+  if(route==='announcements'){state.data.announcements=(await api('/api/announcements')).announcements;return}
+}
+function render(){
+  const map={feed:renderFeed,people:renderPeople,projects:renderProjects,clubs:renderClubs,events:renderEvents,announcements:renderNotices,profile:()=>renderProfile(state.user.username,true),help:renderHelp,admin:renderAdmin};
+  const fn=map[state.route]||renderFeed;
+  const result=fn();
+  if(result?.catch)result.catch(err=>toast(err.message,'error'));
+}
+async function loadFeed(reset=true){
+  const params=new URLSearchParams({limit:'20'});
+  if(state.feedScope==='following')params.set('scope','following');
+  if(state.feedScope==='saved')params.set('saved','1');
+  if(!reset&&state.feedNextCursor)params.set('cursor',state.feedNextCursor);
+  const r=await api(`/api/posts?${params}`);
+  state.data.posts=reset?r.posts:[...state.data.posts,...r.posts];
+  state.feedNextCursor=r.nextCursor;
+}
+async function switchFeed(scope){state.feedScope=scope;await loadFeed(true);renderFeed()}
+async function loadMoreFeed(){if(!state.feedNextCursor)return;await loadFeed(false);renderFeed()}
 
-function renderFeed(){const posts=state.feedScope==='following'?state.data.posts.filter(p=>p.followingAuthor):state.data.posts;$('#view').innerHTML=`<div class="feed-layout"><section class="feed-main"><div class="quick-compose surface">${avatar(state.user,'avatar-sm')}<button data-open="post-dialog">Share an idea, question, or campus update…</button></div><div class="feed-controls"><button id="all-filter" class="${state.feedScope==='all'?'active':''}">Everyone</button><button id="following-filter" class="${state.feedScope==='following'?'active':''}">Following</button><span class="live-label"><i></i> Live</span></div>${posts.length?posts.map(postCard).join(''):state.feedScope==='following'?empty('⌁','Your following feed is quiet','Follow students from the campus directory. Their new posts will appear here live.','Find people','route:people'):empty('✎','The feed starts with you.','No staged posts and no filler. Share the first real thought, question, or collaboration request on your campus.','Write the first post','post-dialog')}</section><aside class="rail"><section class="rail-card surface"><div class="rail-title"><b>Campus pulse</b><span class="live-label"><i></i></span></div><div class="counter-stack"><div class="counter"><b>${state.data.counts.people}</b><span>people</span></div><div class="counter"><b>${state.data.counts.posts}</b><span>posts</span></div><div class="counter"><b>${state.data.counts.clubs}</b><span>clubs</span></div></div></section><section class="rail-card surface"><div class="rail-title"><b>Latest notices</b><button data-route="announcements">See all</button></div>${state.data.announcements.length?state.data.announcements.slice(0,4).map(a=>`<div class="notice-mini"><b>${esc(a.title)}</b><span>${ago(a.created_at)} · @${esc(a.username)}</span></div>`).join(''):'<p style="font-size:9px;color:var(--muted)">No official notices yet.</p>'}</section><section class="rail-card surface ai-card"><span class="ai-glyph">✦</span><b style="font-size:10px">AI, without pretending</b><p>${state.data.aiEnabled?'Writing assistance and automatic pre-publication moderation are connected to the configured provider.':'AI actions remain disabled until the server owner configures a provider key.'}</p></section></aside></div>`;bindView();$('#all-filter').onclick=()=>{state.feedScope='all';renderFeed()};$('#following-filter').onclick=()=>{state.feedScope='following';renderFeed()}}
-function postCard(p){const canDelete=p.author.id===state.user.id||['owner','management'].includes(state.user.role),saved=new Set(JSON.parse(localStorage.getItem('collegeox_saved')||'[]')).has(p.id);return `<article class="post surface" data-post="${p.id}"><div class="post-head">${avatar(p.author,'avatar-sm')}<button class="post-author" data-profile="${esc(p.author.username)}"><b>${esc(p.author.name)} ${p.author.role==='owner'?'<span class="role-badge">Owner</span>':''}</b><span>@${esc(p.author.username)} · ${ago(p.createdAt)}</span></button><div class="post-menu">${canDelete?'<button class="delete-post" title="Delete post">Delete</button>':''}</div></div><span class="post-kind">${esc(p.type)}</span><div class="post-body">${esc(p.body)}</div><div class="tags">${p.tags.map(t=>`<span class="tag">#${esc(t)}</span>`).join('')}</div><div class="post-actions"><button class="react ${p.reacted?'active':''}" data-kind="like">♥ ${p.reactionCount}</button><button class="comment-toggle">□ ${p.commentCount}</button><button class="copy-post">↗ Share</button><button class="spacer save-local">${saved?'◆ Saved':'◇ Save'}</button></div><div class="comments" hidden>${p.comments.map(c=>`<div class="comment">${avatar(c.author,'avatar-sm')}<p><b>${esc(c.author.name)}</b>${esc(c.body)}</p></div>`).join('')}<form class="comment-form"><input maxlength="600" placeholder="Add a reply…"><button>Send</button></form></div></article>`}
-function renderPeople(){$('#view').innerHTML=`${pageHead('Campus directory','Find your people','Search by name, username, or department.')}<section class="search-hero surface"><h2>Who are you looking for?</h2><p>Profiles are created by real campus members. Follow people to build your network.</p><form class="people-search" id="people-search"><input id="people-q" autocomplete="off" placeholder="Try a name or department"><button class="button">Search</button></form></section><div id="people-results">${empty('⌕','Search your campus','Results will appear here. No suggested or fabricated profiles are shown.')}</div>`;$('#people-search').onsubmit=e=>{e.preventDefault();searchPeople($('#people-q').value)}}
+function renderFeed(){
+  const posts=state.data.posts;
+  $('#view').innerHTML=`<div class="feed-layout"><section class="feed-main"><div class="quick-compose surface">${avatar(state.user,'avatar-sm')}<button data-open="post-dialog">Share an idea, question, or campus update…</button></div><div class="feed-controls"><button id="all-filter" class="${state.feedScope==='all'?'active':''}">Everyone</button><button id="following-filter" class="${state.feedScope==='following'?'active':''}">Following</button><button id="saved-filter" class="${state.feedScope==='saved'?'active':''}">Saved</button><span class="live-label"><i></i> Live</span></div>${posts.length?posts.map(postCard).join(''):state.feedScope==='following'?empty('⌁','Your following feed is quiet','Follow students from the campus directory.'):state.feedScope==='saved'?empty('◇','Nothing saved yet','Save posts to keep them here across devices.'):empty('✎','The feed starts with you.','Share the first real thought, question, or collaboration request on your campus.','Write the first post','post-dialog')}${state.feedNextCursor?'<button class="button wide" id="load-more-posts">Load more</button>':''}</section><aside class="rail"><section class="rail-card surface"><div class="rail-title"><b>Campus pulse</b><span class="live-label"><i></i></span></div><div class="counter-stack"><div class="counter"><b>${state.data.counts.people}</b><span>people</span></div><div class="counter"><b>${state.data.counts.posts}</b><span>posts</span></div><div class="counter"><b>${state.data.counts.clubs}</b><span>clubs</span></div></div></section><section class="rail-card surface"><div class="rail-title"><b>Latest notices</b><button data-route="announcements">See all</button></div>${state.data.announcements.length?state.data.announcements.slice(0,4).map(a=>`<div class="notice-mini"><b>${esc(a.title)}</b><span>${ago(a.created_at)} · @${esc(a.username)}</span></div>`).join(''):'<p style="font-size:9px;color:var(--muted)">No official notices yet.</p>'}</section><section class="rail-card surface ai-card"><span class="ai-glyph">✦</span><b style="font-size:10px">AI, without pretending</b><p>${state.data.aiEnabled?'Writing assistance is available. Post moderation fails open if the provider is unavailable.':'AI is optional and currently disabled.'}</p></section></aside></div>`;
+  bindView();
+  $('#all-filter').onclick=()=>switchFeed('all');
+  $('#following-filter').onclick=()=>switchFeed('following');
+  $('#saved-filter').onclick=()=>switchFeed('saved');
+  if($('#load-more-posts'))$('#load-more-posts').onclick=loadMoreFeed;
+}
+function postCard(p){
+  const canDelete=p.author.id===state.user.id||['owner','management'].includes(state.user.role);
+  const canEdit=p.author.id===state.user.id;
+  return `<article class="post surface" data-post="${p.id}"><div class="post-head">${avatar(p.author,'avatar-sm')}<button class="post-author" data-profile="${esc(p.author.username)}"><b>${esc(p.author.name)} ${roleBadge(p.author.role)}</b><span>@${esc(p.author.username)} · ${ago(p.createdAt)}${p.editedAt?' · edited':''}</span></button><div class="post-menu">${canEdit?'<button class="edit-post" title="Edit post">Edit</button>':''}${canDelete?'<button class="delete-post" title="Delete post">Delete</button>':''}</div></div><span class="post-kind">${esc(p.type)}</span><div class="post-body">${esc(p.body)}</div><div class="tags">${p.tags.map(t=>`<span class="tag">#${esc(t)}</span>`).join('')}</div><div class="post-actions"><button class="react ${p.reacted?'active':''}" data-kind="like">♥ ${p.reactionCount}</button><button class="comment-toggle">□ ${p.commentCount}</button><button class="copy-post">↗ Share</button><button class="spacer save-post">${p.saved?'◆ Saved':'◇ Save'}</button></div><div class="comments" hidden>${p.comments.map(c=>`<div class="comment">${avatar(c.author,'avatar-sm')}<p><b>${esc(c.author.name)}</b>${esc(c.body)}</p></div>`).join('')}<form class="comment-form"><input maxlength="600" placeholder="Add a reply…"><button>Send</button></form></div></article>`;
+}
+async function showPermalink(postId){
+  try{
+    const r=await api(`/api/posts/${encodeURIComponent(postId)}`);
+    state.route='feed';
+    $('#route-eyebrow').textContent='Shared post';
+    $('#route-title').textContent='Campus post';
+    $('#view').innerHTML=`<section class="feed-main">${postCard(r.post)}</section>`;
+    bindView();
+  }catch(err){toast(err.message,'error')}
+}
+
+function renderPeople(){$('#view').innerHTML=`${pageHead('Campus directory','Find your people','Search by name, username, or department.')}<section class="search-hero surface"><h2>Who are you looking for?</h2><p>Private profiles are excluded from directory search.</p><form class="people-search" id="people-search"><input id="people-q" autocomplete="off" placeholder="Try a name or department"><button class="button">Search</button></form></section><div id="people-results">${empty('⌕','Search your campus','Results will appear here.')}</div>`;$('#people-search').onsubmit=e=>{e.preventDefault();searchPeople($('#people-q').value)}}
 async function searchPeople(q){const box=$('#people-results');if(!q.trim()){box.innerHTML=empty('⌕','Type a name to begin','Search uses live campus account data.');return}box.innerHTML='<div class="empty surface"><div><p>Searching campus…</p></div></div>';try{const r=await api(`/api/users/search?q=${encodeURIComponent(q)}`);box.innerHTML=r.users.length?`<div class="grid-3">${r.users.map(personCard).join('')}</div>`:empty('○','No one found','Try another name, username, or department.');bindView()}catch(err){toast(err.message,'error')}}
 function personCard(p){const u=p.user,self=u.id===state.user.id;return `<article class="person-card surface">${person(u)}<p>${esc(u.bio||'This person has not added a bio yet.')}</p><div class="person-meta"><span>${p.counts.followers} followers</span><span>${p.counts.posts} posts</span></div>${self?'<button class="button follow-button" data-route="profile">View my profile</button>':`<button class="button ${p.followed?'ghost':'primary'} follow-button" data-follow="${u.id}">${p.followed?'Following':'Follow'}</button>`}</article>`}
-async function renderProfile(username,isSelf=false){$('#view').innerHTML='<div class="empty surface"><div><p>Loading profile…</p></div></div>';try{const r=await api(`/api/profiles/${encodeURIComponent(username)}`);state.profile=r;const u=r.user,self=u.id===state.user.id;$('#view').innerHTML=`<section class="profile-cover" style="--accent:${esc(u.accent)}"></section><section class="profile-body"><div class="profile-top">${avatar(u)}<div class="profile-name"><h1>${esc(u.name)}</h1><span>@${esc(u.username)} ${u.role==='owner'?'<span class="role-badge">Owner</span>':''}</span></div><div class="profile-top-actions">${self?'<button class="button" id="edit-profile">Edit profile</button><button class="button ghost" id="open-logout">Sign out</button>':`<button class="button ${r.followed?'ghost':'primary'}" data-follow="${u.id}">${r.followed?'Following':'Follow'}</button>`}</div></div><p class="profile-bio">${r.private?'This profile is visible, but its owner keeps personal details and posts private.':esc(u.bio||'No bio yet.')}</p><div class="profile-details">${u.department?`<span>◫ ${esc(u.department)}</span>`:''}${u.year?`<span>◷ ${esc(u.year)}</span>`:''}${u.pronouns?`<span>◉ ${esc(u.pronouns)}</span>`:''}${u.location?`<span>⌖ ${esc(u.location)}</span>`:''}</div><div class="interest-list">${u.interests.map(x=>`<span class="pill">${esc(x)}</span>`).join('')}</div><div class="profile-links">${u.links.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label||new URL(x.url).hostname)} ↗</a>`).join('')}</div><div class="profile-stats"><div><b>${r.counts.posts}</b><span>posts</span></div><div><b>${r.counts.followers}</b><span>followers</span></div><div><b>${r.counts.following}</b><span>following</span></div></div></section><section class="profile-posts">${r.private?empty('◉','Private activity','This person has chosen not to share profile activity.'):r.posts.length?r.posts.map(postCard).join(''):empty('✎','Nothing published yet',self?'Your posts will collect here when you share them.':'This person has not published anything yet.',self?'Create a post':'',self?'post-dialog':'')}</section>`;bindView();if(self){$('#edit-profile').onclick=openProfileEditor;$('#open-logout').onclick=()=>openDialog('logout-dialog')}}catch(err){toast(err.message,'error');navigate('people')}}
-function renderProjects(){const items=state.data.projects;$('#view').innerHTML=`${pageHead('Build together','Projects','Turn ideas into teams, then turn teams into things.','New project','project-dialog')}${items.length?`<div class="grid-3">${items.map(p=>`<article class="entity-card surface"><div class="symbol">◇</div><h3>${esc(p.name)}</h3><p>${esc(p.pitch)}</p><div class="entity-meta">${p.skills.map(s=>`<span class="pill">${esc(s)}</span>`).join('')}</div><div class="entity-foot"><span>${p.members}/${p.capacity} members · by @${esc(p.username)}</span><button class="button ${p.joined?'ghost':'primary'}" data-project="${p.id}">${p.joined?'Joined':'Join'}</button></div></article>`).join('')}</div>`:empty('◇','No projects yet','Start the first real campus build and invite people with the skills you need.','Start a project','project-dialog')}`;bindView()}
-function renderClubs(){const items=state.data.clubs;$('#view').innerHTML=`${pageHead('Belong somewhere','Clubs','Communities created and shaped by your campus.','Start a club','club-dialog')}${items.length?`<div class="grid-3">${items.map(c=>`<article class="entity-card surface" style="--card-accent:${esc(c.accent)}"><div class="symbol">◎</div><h3>${esc(c.name)}</h3><p>${esc(c.description)}</p><div class="entity-meta"><span class="pill">${esc(c.category)}</span></div><div class="entity-foot"><span>${c.members} members · by @${esc(c.username)}</span><div class="entity-actions">${c.joined?`<button class="button primary" data-club-chat="${c.id}">Open chat</button>`:''}<button class="button ${c.joined?'ghost':'primary'}" data-club="${c.id}">${c.joined?'Leave':'Join'}</button></div></div></article>`).join('')}</div>`:empty('◎','No clubs yet','Create a community around a craft, cause, sport, or curiosity.','Start a club','club-dialog')}`;bindView()}
+async function renderProfile(username){
+  $('#view').innerHTML='<div class="empty surface"><div><p>Loading profile…</p></div></div>';
+  try{
+    const r=await api(`/api/profiles/${encodeURIComponent(username)}`);
+    state.profile=r;
+    const u=r.user,self=u.id===state.user.id;
+    $('#view').innerHTML=`<section class="profile-cover" style="--accent:${esc(u.accent)}"></section><section class="profile-body"><div class="profile-top">${avatar(u)}<div class="profile-name"><h1>${esc(u.name)}</h1><span>@${esc(u.username)} ${roleBadge(u.role)}</span></div><div class="profile-top-actions">${self?'<button class="button" id="edit-profile">Edit profile</button><button class="button ghost" id="open-logout">Sign out</button>':`<button class="button ${r.followed?'ghost':'primary'}" data-follow="${u.id}">${r.followed?'Following':'Follow'}</button>`}</div></div><p class="profile-bio">${r.private?'This profile is visible, but its owner keeps personal details and posts private.':esc(u.bio||'No bio yet.')}</p><div class="profile-details">${u.department?`<span>◫ ${esc(u.department)}</span>`:''}${u.year?`<span>◷ ${esc(u.year)}</span>`:''}${u.pronouns?`<span>◉ ${esc(u.pronouns)}</span>`:''}${u.location?`<span>⌖ ${esc(u.location)}</span>`:''}</div><div class="interest-list">${u.interests.map(x=>`<span class="pill">${esc(x)}</span>`).join('')}</div><div class="profile-links">${u.links.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label||'Link')} ↗</a>`).join('')}</div><div class="profile-stats"><div><b>${r.counts.posts}</b><span>posts</span></div><div><b>${r.counts.followers}</b><span>followers</span></div><div><b>${r.counts.following}</b><span>following</span></div></div></section><section class="profile-posts">${r.private?empty('◉','Private activity','This person has chosen not to share profile activity.'):r.posts.length?r.posts.map(postCard).join(''):empty('✎','Nothing published yet',self?'Your posts will collect here when you share them.':'This person has not published anything yet.',self?'Create a post':'',self?'post-dialog':'')}</section>`;
+    bindView();
+    if(self){$('#edit-profile').onclick=openProfileEditor;$('#open-logout').onclick=()=>openDialog('logout-dialog')}
+  }catch(err){toast(err.message,'error');navigate('people')}
+}
+function renderProjects(){
+  const items=state.data.projects;
+  $('#view').innerHTML=`${pageHead('Build together','Projects','Turn ideas into teams, then move them through a real lifecycle.','New project','project-dialog')}${items.length?`<div class="grid-3">${items.map(p=>`<article class="entity-card surface"><div class="symbol">◇</div><h3>${esc(p.name)}</h3><p>${esc(p.pitch)}</p><div class="entity-meta">${p.skills.map(s=>`<span class="pill">${esc(s)}</span>`).join('')}<span class="pill">${esc(p.status)}</span></div><div class="entity-foot"><span>${p.members}/${p.capacity} members · by @${esc(p.username)}</span><div class="entity-actions">${p.isOwner||['owner','management'].includes(state.user.role)?`<button class="button ghost" data-project-status="${p.id}">Status</button>`:''}<button class="button ${p.joined?'ghost':'primary'}" data-project="${p.id}">${p.isOwner?'Owner':p.joined?'Joined':'Join'}</button></div></div></article>`).join('')}</div>`:empty('◇','No projects yet','Start the first real campus build.','Start a project','project-dialog')}`;
+  bindView();
+}
+function renderClubs(){
+  const items=state.data.clubs;
+  $('#view').innerHTML=`${pageHead('Belong somewhere','Clubs','Communities with explicit active, closed, and archived states.','Start a club','club-dialog')}${items.length?`<div class="grid-3">${items.map(c=>`<article class="entity-card surface" style="--card-accent:${esc(c.accent)}"><div class="symbol">◎</div><h3>${esc(c.name)}</h3><p>${esc(c.description)}</p><div class="entity-meta"><span class="pill">${esc(c.category)}</span><span class="pill">${esc(c.status)}</span></div><div class="entity-foot"><span>${c.members} members · by @${esc(c.username)}</span><div class="entity-actions">${c.isOwner||['owner','management'].includes(state.user.role)?`<button class="button ghost" data-club-status="${c.id}">Status</button>`:''}${c.joined?`<button class="button primary" data-club-chat="${c.id}">Open chat</button>`:''}<button class="button ${c.joined?'ghost':'primary'}" data-club="${c.id}">${c.isOwner?'Owner':c.joined?'Leave':'Join'}</button></div></div></article>`).join('')}</div>`:empty('◎','No clubs yet','Create a community around a craft, cause, sport, or curiosity.','Start a club','club-dialog')}`;
+  bindView();
+}
 async function openClubChat(clubId){state.clubChat=clubId;const club=state.data.clubs.find(item=>item.id===clubId);$('#club-chat-name').textContent=club?.name||'Club chat';$('#club-chat-messages').innerHTML='<div class="club-chat-empty"><p>Loading conversation…</p></div>';openDialog('club-chat-dialog');try{await loadClubChat(clubId);$('#club-chat-input').focus()}catch(err){closeDialog('club-chat-dialog');toast(err.message,'error')}}
-async function loadClubChat(clubId=state.clubChat){if(!clubId)return;const result=await api(`/api/clubs/${clubId}/messages`);if(state.clubChat!==clubId)return;$('#club-chat-name').textContent=result.club.name;const box=$('#club-chat-messages');box.innerHTML=result.messages.length?result.messages.map(message=>`<article class="club-chat-message ${message.author.id===state.user.id?'mine':''}">${avatar(message.author,'avatar-sm')}<div><header><b>${esc(message.author.name)}</b><span>@${esc(message.author.username)} · ${ago(message.createdAt)}</span></header><p>${esc(message.body)}</p></div></article>`).join(''):'<div class="club-chat-empty"><div class="empty-icon">◎</div><h4>Start the club conversation</h4><p>Messages from club members will appear here live.</p></div>';box.scrollTop=box.scrollHeight}
+async function loadClubChat(clubId=state.clubChat){if(!clubId)return;const result=await api(`/api/clubs/${clubId}/messages`);if(state.clubChat!==clubId)return;$('#club-chat-name').textContent=result.club.name;const box=$('#club-chat-messages');box.innerHTML=result.messages.length?result.messages.map(message=>`<article class="club-chat-message ${message.author.id===state.user.id?'mine':''}">${avatar(message.author,'avatar-sm')}<div><header><b>${esc(message.author.name)}</b><span>@${esc(message.author.username)} · ${ago(message.createdAt)}</span></header><p>${esc(message.body)}</p></div></article>`).join(''):'<div class="club-chat-empty"><div class="empty-icon">◎</div><h4>Start the club conversation</h4><p>Messages from club members will appear here live.</p></div>';$('#club-chat-input').disabled=result.club.status!=='active';box.scrollTop=box.scrollHeight}
 async function sendClubMessage(event){event.preventDefault();const input=$('#club-chat-input'),button=$('button[type=submit]',event.currentTarget),body=input.value.trim();if(!body||!state.clubChat)return;button.disabled=true;try{await api(`/api/clubs/${state.clubChat}/messages`,{method:'POST',body:JSON.stringify({body})});input.value='';await loadClubChat();input.focus()}catch(err){toast(err.message,'error')}finally{button.disabled=false}}
-function renderEvents(){const items=state.data.events;$('#view').innerHTML=`${pageHead('Show up','Events','What your campus is doing next.','Create event','event-dialog')}${items.length?`<div class="grid-3">${items.map(e=>`<article class="entity-card event-card surface"><div class="symbol">□</div><time>${formatDate(e.starts_at)}</time><h3>${esc(e.title)}</h3><p>${esc(e.description||'No description added.')}</p><div class="entity-meta"><span class="pill">⌖ ${esc(e.location||'Location TBA')}</span></div><div class="entity-foot"><span>${e.attendees}/${e.capacity} going</span><button class="button ${e.going?'ghost':'primary'}" data-event="${e.id}">${e.going?'Going':'RSVP'}</button></div></article>`).join('')}</div>`:empty('□','Nothing scheduled yet','Create the first real event. It will appear here for everyone immediately.','Create event','event-dialog')}`;bindView()}
-function renderNotices(){const can=['owner','management','faculty'].includes(state.user.role),items=state.data.announcements;$('#view').innerHTML=`${pageHead('Official','Notices','Important campus updates without feed noise.',can?'Publish notice':'',can?'announcement-dialog':'')}${items.length?`<div class="announcement-list">${items.map(a=>`<article class="announcement surface"><i>△</i><div><h3>${esc(a.title)}</h3><p>${esc(a.body)} · ${esc(a.audience)} · @${esc(a.username)}</p></div><time>${ago(a.created_at)}</time></article>`).join('')}</div>`:empty('△','No notices published','Official updates from faculty and management will appear here.',can?'Publish the first notice':'',can?'announcement-dialog':'')}`;bindView()}
-async function renderHelp(){$('#view').innerHTML=`${pageHead('Support','Help & issues','Report a problem once and follow its saved status.')}<div class="help-layout"><form class="help-form surface" id="issue-form"><span class="kicker">New ticket</span><h2 style="font-family:Georgia,serif;font-weight:500">Tell management what happened.</h2><label>Subject<input id="issue-subject" required maxlength="120"></label><label>Category<select id="issue-category"><option>Technical</option><option>Safety</option><option>Account</option><option>Content</option><option>Other</option></select></label><label>Details<textarea id="issue-description" required maxlength="1200" placeholder="Include what you tried and what you expected to happen."></textarea></label><button class="button primary" type="submit">Submit issue</button></form><section><div class="page-head"><div><span class="kicker">Saved</span><h1 style="font-size:28px">${['owner','management'].includes(state.user.role)?'Campus queue':'Your tickets'}</h1></div></div><div id="issue-list"><div class="empty surface"><div><p>Loading tickets…</p></div></div></div></section></div>`;$('#issue-form').onsubmit=submitIssue;await loadIssues()}
-async function loadIssues(){try{const r=await api('/api/issues'),admin=['owner','management'].includes(state.user.role);$('#issue-list').innerHTML=r.issues.length?r.issues.map(i=>`<article class="ticket surface" data-issue="${i.id}"><div class="ticket-head"><h3>${esc(i.subject)}</h3><span class="status-pill">${esc(i.status.replace('_',' '))}</span></div><p>${esc(i.description)}</p><small>${esc(i.category)} · ${i.username?`@${esc(i.username)} · `:''}${ago(i.created_at)}</small>${admin?`<select class="issue-status"><option value="open" ${i.status==='open'?'selected':''}>Open</option><option value="in_progress" ${i.status==='in_progress'?'selected':''}>In progress</option><option value="resolved" ${i.status==='resolved'?'selected':''}>Resolved</option></select><textarea class="issue-note" placeholder="Private management note">${esc(i.admin_note||'')}</textarea><button class="button save-issue">Save update</button>`:i.admin_note?`<p><b>Management:</b> ${esc(i.admin_note)}</p>`:''}</article>`).join(''):empty('✓','No issues here','Submitted issues and their status will be saved here.');$$('.save-issue').forEach(b=>b.onclick=()=>saveIssue(b))}catch(err){toast(err.message,'error')}}
-async function renderAdmin(){$('#view').innerHTML='<div class="empty surface"><div><p>Loading owner console…</p></div></div>';try{const r=await api('/api/admin/stats');$('#view').innerHTML=`<section class="admin-banner surface"><div><span class="kicker" style="color:var(--yellow)">Owner access</span><h2>Campus command room</h2><p>Real numbers only. Empty means empty.</p></div><button class="button" data-route="help">Open issue queue</button></section><div class="metric-grid">${Object.entries(r.stats).map(([k,v])=>`<div class="metric surface"><b>${v}</b><span>${esc(k.replace(/([A-Z])/g,' $1'))}</span></div>`).join('')}</div><div class="admin-columns"><section class="admin-card surface"><h3>Newest accounts</h3>${r.recentUsers.map(u=>`<div class="admin-user">${avatar(u,'avatar-sm')}<div><b>${esc(u.name)}</b><span>@${esc(u.username)} · ${esc(u.role)}</span></div></div>`).join('')}</section><section class="admin-card surface"><h3>Owner powers</h3><p style="font-size:10px;color:var(--muted);line-height:1.7">You can delete any post directly from the live feed, publish official notices, view and update every support issue, inspect real platform counts, and access every ordinary campus workflow.</p><button class="button" data-route="feed">Moderate live feed</button> <button class="button" data-route="help">Review issues</button></section></div>`;bindView()}catch(err){toast(err.message,'error')}}
+
+function renderEvents(){
+  const items=state.data.events;
+  $('#view').innerHTML=`${pageHead('Show up','Events','Capacity is enforced and event times are stored in UTC.','Create event','event-dialog')}${items.length?`<div class="grid-3">${items.map(e=>`<article class="entity-card event-card surface"><div class="symbol">□</div><time>${formatDate(e.starts_at)}</time><h3>${esc(e.title)}</h3><p>${esc(e.description||'No description added.')}</p><div class="entity-meta"><span class="pill">⌖ ${esc(e.location||'Location TBA')}</span></div><div class="entity-foot"><span>${e.attendees}/${e.capacity} going</span><button class="button ${e.going?'ghost':'primary'}" data-event="${e.id}" ${!e.going&&e.attendees>=e.capacity?'disabled':''}>${e.isCreator?'Hosting':e.going?'Going':e.attendees>=e.capacity?'Full':'RSVP'}</button></div></article>`).join('')}</div>`:empty('□','Nothing scheduled yet','Create the first real event.','Create event','event-dialog')}`;
+  bindView();
+}
+function renderNotices(){
+  const can=['owner','management','faculty'].includes(state.user.role),items=state.data.announcements;
+  $('#view').innerHTML=`${pageHead('Official','Notices','Only notices for your audience are returned by the server.',can?'Publish notice':'',can?'announcement-dialog':'')}${items.length?`<div class="announcement-list">${items.map(a=>`<article class="announcement surface"><i>△</i><div><h3>${esc(a.title)}</h3><p>${esc(a.body)} · ${esc(a.audience)} · @${esc(a.username)}</p></div><time>${ago(a.created_at)}</time></article>`).join('')}</div>`:empty('△','No notices published','Official updates for your audience will appear here.',can?'Publish the first notice':'',can?'announcement-dialog':'')}`;
+  bindView();
+}
+
+async function renderHelp(){
+  $('#view').innerHTML=`${pageHead('Support','Help & issues','Report a problem and continue the conversation without exposing private management notes.')}<div class="help-layout"><form class="help-form surface" id="issue-form"><span class="kicker">New ticket</span><h2 style="font-family:Georgia,serif;font-weight:500">Tell management what happened.</h2><label>Subject<input id="issue-subject" required maxlength="120"></label><label>Category<select id="issue-category"><option>Technical</option><option>Safety</option><option>Account</option><option>Content</option><option>Other</option></select></label><label>Details<textarea id="issue-description" required maxlength="1200" placeholder="Include what you tried and what you expected to happen."></textarea></label><button class="button primary" type="submit">Submit issue</button></form><section><div class="page-head"><div><span class="kicker">Saved</span><h1 style="font-size:28px">${['owner','management'].includes(state.user.role)?'Campus queue':'Your tickets'}</h1></div></div><div id="issue-list"><div class="empty surface"><div><p>Loading tickets…</p></div></div></div></section></div>`;
+  $('#issue-form').onsubmit=submitIssue;
+  await loadIssues();
+}
+async function loadIssues(){
+  try{
+    const r=await api('/api/issues'),admin=['owner','management'].includes(state.user.role);
+    $('#issue-list').innerHTML=r.issues.length?r.issues.map(i=>`<article class="ticket surface" data-issue="${i.id}"><div class="ticket-head"><h3>${esc(i.subject)}</h3><span class="status-pill">${esc(i.status.replace('_',' '))}</span></div><p>${esc(i.description)}</p><small>${esc(i.category)} · ${i.username?`@${esc(i.username)} · `:''}${ago(i.created_at)}</small><div class="issue-thread">${(i.messages||[]).map(m=>`<p><b>${esc(m.author.name)}${m.visibility==='private'?' · private':''}:</b> ${esc(m.body)}</p>`).join('')}</div>${admin?`<select class="issue-status"><option value="open" ${i.status==='open'?'selected':''}>Open</option><option value="in_progress" ${i.status==='in_progress'?'selected':''}>In progress</option><option value="resolved" ${i.status==='resolved'?'selected':''}>Resolved</option></select><textarea class="issue-note" placeholder="Private management note">${esc(i.admin_note||'')}</textarea><button class="button save-issue">Save status/private note</button>`:''}<textarea class="issue-reply" maxlength="1200" placeholder="Add a reply"></textarea>${admin?'<select class="issue-reply-visibility"><option value="public">Visible to reporter</option><option value="private">Management only</option></select>':''}<button class="button reply-issue">Send reply</button></article>`).join(''):empty('✓','No issues here','Submitted issues and their status will be saved here.');
+    $$('.save-issue').forEach(b=>b.onclick=()=>saveIssue(b));
+    $$('.reply-issue').forEach(b=>b.onclick=()=>replyIssue(b));
+  }catch(err){toast(err.message,'error')}
+}
+async function renderAdmin(){
+  $('#view').innerHTML='<div class="empty surface"><div><p>Loading owner console…</p></div></div>';
+  try{
+    const r=await api('/api/admin/stats');
+    const canRoles=state.user.role==='owner';
+    $('#view').innerHTML=`<section class="admin-banner surface"><div><span class="kicker" style="color:var(--yellow)">Owner access</span><h2>Campus command room</h2><p>Management data excludes private account emails.</p></div><button class="button" data-route="help">Open issue queue</button></section><div class="metric-grid">${Object.entries(r.stats).map(([k,v])=>`<div class="metric surface"><b>${v}</b><span>${esc(k.replace(/([A-Z])/g,' $1'))}</span></div>`).join('')}</div><div class="admin-columns"><section class="admin-card surface"><h3>Newest accounts</h3>${r.recentUsers.map(u=>`<div class="admin-user" data-admin-user="${u.id}">${avatar(u,'avatar-sm')}<div><b>${esc(u.name)}</b><span>@${esc(u.username)} · ${esc(u.role)}</span></div>${canRoles?`<select class="role-select" data-role-user="${u.id}" data-current-role="${u.role}"><option value="student" ${u.role==='student'?'selected':''}>student</option><option value="faculty" ${u.role==='faculty'?'selected':''}>faculty</option><option value="management" ${u.role==='management'?'selected':''}>management</option><option value="owner" ${u.role==='owner'?'selected':''}>owner</option></select>`:''}</div>`).join('')}</section><section class="admin-card surface"><h3>Owner powers</h3><p style="font-size:10px;color:var(--muted);line-height:1.7">Owners can manage roles with last-owner protection. Management can moderate posts, notices, and support tickets.</p><button class="button" data-route="feed">Moderate live feed</button> <button class="button" data-route="help">Review issues</button></section></div>`;
+    bindView();
+    $$('.role-select').forEach(select=>select.onchange=()=>changeRole(select));
+  }catch(err){toast(err.message,'error')}
+}
 
 function bindView(){
-  $$('[data-open]',$('#view')).forEach(b=>b.onclick=()=>openDialog(b.dataset.open));$$('[data-route]',$('#view')).forEach(b=>b.onclick=()=>navigate(b.dataset.route));$$('[data-profile]',$('#view')).forEach(b=>b.onclick=()=>{state.route='people';renderProfile(b.dataset.profile)});
-  $$('[data-follow]').forEach(b=>b.onclick=()=>follow(b.dataset.follow));$$('.comment-toggle').forEach(b=>b.onclick=()=>{const c=$('.comments',b.closest('.post'));c.hidden=!c.hidden;if(!c.hidden)$('input',c).focus()});$$('.comment-form').forEach(f=>f.onsubmit=e=>comment(e,f));$$('.react').forEach(b=>b.onclick=()=>react(b));$$('.delete-post').forEach(b=>b.onclick=()=>deletePost(b));$$('.copy-post').forEach(b=>b.onclick=()=>copyPost(b));$$('.save-local').forEach(b=>b.onclick=()=>saveLocal(b));
-  $$('[data-project]').forEach(b=>b.onclick=()=>toggle(`/api/projects/${b.dataset.project}/join`));$$('[data-club]').forEach(b=>b.onclick=()=>toggle(`/api/clubs/${b.dataset.club}/join`));$$('[data-club-chat]').forEach(b=>b.onclick=()=>openClubChat(b.dataset.clubChat));$$('[data-event]').forEach(b=>b.onclick=()=>toggle(`/api/events/${b.dataset.event}/rsvp`));
+  $$('[data-open]',$('#view')).forEach(b=>b.onclick=()=>openDialog(b.dataset.open));
+  $$('[data-route]',$('#view')).forEach(b=>b.onclick=()=>navigate(b.dataset.route));
+  $$('[data-profile]',$('#view')).forEach(b=>b.onclick=()=>{state.route='people';renderProfile(b.dataset.profile)});
+  $$('[data-follow]').forEach(b=>b.onclick=()=>follow(b.dataset.follow));
+  $$('.comment-toggle').forEach(b=>b.onclick=()=>{const c=$('.comments',b.closest('.post'));c.hidden=!c.hidden;if(!c.hidden)$('input',c).focus()});
+  $$('.comment-form').forEach(f=>f.onsubmit=e=>comment(e,f));
+  $$('.react').forEach(b=>b.onclick=()=>react(b));
+  $$('.edit-post').forEach(b=>b.onclick=()=>editPost(b));
+  $$('.delete-post').forEach(b=>b.onclick=()=>deletePost(b));
+  $$('.copy-post').forEach(b=>b.onclick=()=>copyPost(b));
+  $$('.save-post').forEach(b=>b.onclick=()=>savePost(b));
+  $$('[data-project]').forEach(b=>b.onclick=()=>{if(b.textContent!=='Owner')toggle(`/api/projects/${b.dataset.project}/join`,'projects')});
+  $$('[data-project-status]').forEach(b=>b.onclick=()=>changeEntityStatus('projects',b.dataset.projectStatus,['recruiting','active','completed','archived']));
+  $$('[data-club]').forEach(b=>b.onclick=()=>{if(b.textContent!=='Owner')toggle(`/api/clubs/${b.dataset.club}/join`,'clubs')});
+  $$('[data-club-status]').forEach(b=>b.onclick=()=>changeEntityStatus('clubs',b.dataset.clubStatus,['active','closed','archived']));
+  $$('[data-club-chat]').forEach(b=>b.onclick=()=>openClubChat(b.dataset.clubChat));
+  $$('[data-event]').forEach(b=>b.onclick=()=>{if(!b.disabled&&b.textContent!=='Hosting')toggle(`/api/events/${b.dataset.event}/rsvp`,'events')});
 }
-async function createPost(e){e.preventDefault();const btn=$('button[type=submit]',e.currentTarget);btn.disabled=true;try{await api('/api/posts',{method:'POST',body:JSON.stringify({body:$('#post-body').value,type:state.postType,tags:$('#post-tags').value.split(',').map(x=>x.trim()).filter(Boolean)})});e.currentTarget.reset();$('#post-count').textContent='0 / 1800';closeDialog('post-dialog');await refresh();navigate('feed');toast('Published to the live feed.')}catch(err){toast(err.message,'error')}finally{btn.disabled=false}}
+async function createPost(e){
+  e.preventDefault();
+  const btn=$('button[type=submit]',e.currentTarget);btn.disabled=true;
+  try{
+    const r=await api('/api/posts',{method:'POST',body:JSON.stringify({body:$('#post-body').value,type:state.postType,tags:$('#post-tags').value.split(',').map(x=>x.trim()).filter(Boolean)})});
+    e.currentTarget.reset();$('#post-count').textContent='0 / 1800';closeDialog('post-dialog');await refresh(false);state.feedScope='all';await loadFeed(true);renderFeed();toast(r.moderationUnavailable?'Published. AI moderation was temporarily unavailable.':'Published to the live feed.');
+  }catch(err){toast(err.message,'error')}finally{btn.disabled=false}
+}
 async function aiRewrite(){if(!state.data.aiEnabled){toast('AI is off. Add OPENAI_API_KEY on the server to enable it.','error');return}const btn=$('#ai-rewrite'),text=$('#post-body').value;if(!text.trim()){toast('Write a draft first.','error');return}btn.disabled=true;$('#ai-composer-state').textContent='Improving your draft…';try{const r=await api('/api/ai/assist',{method:'POST',body:JSON.stringify({mode:'rewrite',text})});$('#post-body').value=r.result;$('#post-count').textContent=`${r.result.length} / 1800`;$('#ai-composer-state').textContent='Draft updated. You stay in control.'}catch(err){toast(err.message,'error');$('#ai-composer-state').textContent='AI request failed.'}finally{btn.disabled=false}}
-async function createEntity(e,path,payload,dialog,message,route){e.preventDefault();const btn=$('button[type=submit]',e.currentTarget);btn.disabled=true;try{await api(`/api/${path}`,{method:'POST',body:JSON.stringify(payload)});e.currentTarget.reset();closeDialog(dialog);await refresh();navigate(route);toast(message)}catch(err){toast(err.message,'error')}finally{btn.disabled=false}}
-async function react(b){try{const id=b.closest('.post').dataset.post;await api(`/api/posts/${id}/react`,{method:'POST',body:JSON.stringify({kind:b.dataset.kind})});await refresh()}catch(err){toast(err.message,'error')}}
-async function comment(e,f){e.preventDefault();const input=$('input',f),id=f.closest('.post').dataset.post;if(!input.value.trim())return;try{await api(`/api/posts/${id}/comments`,{method:'POST',body:JSON.stringify({body:input.value})});await refresh()}catch(err){toast(err.message,'error')}}
-async function deletePost(b){if(!confirm('Delete this post permanently?'))return;try{await api(`/api/posts/${b.closest('.post').dataset.post}`,{method:'DELETE'});await refresh();toast('Post deleted.')}catch(err){toast(err.message,'error')}}
-async function copyPost(b){const p=state.data.posts.find(x=>x.id===b.closest('.post').dataset.post);try{await navigator.clipboard.writeText(`${p.body}\n\n— @${p.author.username} on College Ox`);toast('Post copied to clipboard.')}catch{toast('Clipboard access is unavailable.','error')}}
-function saveLocal(b){const id=b.closest('.post').dataset.post,items=new Set(JSON.parse(localStorage.getItem('collegeox_saved')||'[]'));if(items.has(id)){items.delete(id);b.textContent='◇ Save';toast('Removed from saved posts.')}else{items.add(id);b.textContent='◆ Saved';toast('Saved on this device.')}localStorage.setItem('collegeox_saved',JSON.stringify([...items]))}
+async function createEntity(e,path,payload,dialog,message,route){e.preventDefault();const btn=$('button[type=submit]',e.currentTarget);btn.disabled=true;try{await api(`/api/${path}`,{method:'POST',body:JSON.stringify(payload)});e.currentTarget.reset();closeDialog(dialog);await loadRouteData(route);render();toast(message)}catch(err){toast(err.message,'error')}finally{btn.disabled=false}}
+async function react(b){try{const id=b.closest('.post').dataset.post;await api(`/api/posts/${id}/react`,{method:'POST',body:'{}'});await loadFeed(true);renderFeed()}catch(err){toast(err.message,'error')}}
+async function comment(e,f){e.preventDefault();const input=$('input',f),id=f.closest('.post').dataset.post;if(!input.value.trim())return;try{await api(`/api/posts/${id}/comments`,{method:'POST',body:JSON.stringify({body:input.value})});await loadFeed(true);renderFeed()}catch(err){toast(err.message,'error')}}
+async function editPost(b){const card=b.closest('.post'),id=card.dataset.post,p=state.data.posts.find(x=>x.id===id)||state.profile?.posts?.find?.(x=>x.id===id);const body=prompt('Edit your post',p?.body||$('.post-body',card).textContent);if(body===null)return;try{await api(`/api/posts/${id}`,{method:'PATCH',body:JSON.stringify({body})});await loadFeed(true);renderFeed();toast('Post updated.')}catch(err){toast(err.message,'error')}}
+async function deletePost(b){if(!confirm('Delete this post permanently?'))return;try{await api(`/api/posts/${b.closest('.post').dataset.post}`,{method:'DELETE'});await refresh(false);await loadFeed(true);renderFeed();toast('Post deleted.')}catch(err){toast(err.message,'error')}}
+async function copyPost(b){const id=b.closest('.post').dataset.post,p=state.data.posts.find(x=>x.id===id);const link=`${location.origin}/?post=${encodeURIComponent(id)}`;try{await navigator.clipboard.writeText(`${p?.body||'College Ox post'}\n\n${link}`);toast('Post link copied.')}catch{toast(link,'error')}}
+async function savePost(b){const id=b.closest('.post').dataset.post;try{const r=await api(`/api/posts/${id}/save`,{method:'POST',body:'{}'});b.textContent=r.saved?'◆ Saved':'◇ Save';toast(r.saved?'Saved to your account.':'Removed from saved posts.');if(state.feedScope==='saved'&&!r.saved){await loadFeed(true);renderFeed()}}catch(err){toast(err.message,'error')}}
 async function follow(id){try{await api(`/api/users/${id}/follow`,{method:'POST',body:'{}'});if(state.profile?.user?.id===id)await renderProfile(state.profile.user.username);else{const q=$('#people-q')?.value;if(q)await searchPeople(q)}toast('Follow list updated.')}catch(err){toast(err.message,'error')}}
-async function toggle(url){try{await api(url,{method:'POST',body:'{}'});await refresh();toast('Membership updated.')}catch(err){toast(err.message,'error')}}
-function openProfileEditor(){const u=state.user;state.avatarDraft=u.avatar||'';$('#profile-name').value=u.name;$('#profile-username').value=u.username;$('#profile-bio').value=u.bio;$('#profile-department').value=u.department;$('#profile-year').value=u.year;$('#profile-pronouns').value=u.pronouns;$('#profile-location').value=u.location;$('#profile-accent').value=u.accent;$('#profile-visibility').value=u.profileVisibility;$('#profile-interests').value=u.interests.join(', ');$('#profile-links').value=u.links.map(x=>x.url).join('\n');renderAvatarPreview();openDialog('profile-dialog')}
+async function toggle(url,route=state.route){try{await api(url,{method:'POST',body:'{}'});await loadRouteData(route);render();toast('Updated.')}catch(err){toast(err.message,'error')}}
+async function changeEntityStatus(kind,id,allowed){const next=prompt(`Set status: ${allowed.join(', ')}`,allowed[0]);if(next===null)return;if(!allowed.includes(next)){toast('Invalid status.','error');return}try{await api(`/api/${kind}/${id}`,{method:'PATCH',body:JSON.stringify({status:next})});await loadRouteData(kind);render();toast('Status updated.')}catch(err){toast(err.message,'error')}}
+
+function openProfileEditor(){const u=state.user;state.avatarDraft=u.avatar||'';$('#profile-name').value=u.name;$('#profile-username').value=u.username;$('#profile-bio').value=u.bio;$('#profile-department').value=u.department;$('#profile-year').value=u.year;$('#profile-pronouns').value=u.pronouns;$('#profile-location').value=u.location;$('#profile-accent').value=u.accent;$('#profile-visibility').value=u.profileVisibility;$('#profile-interests').value=u.interests.join(', ');$('#profile-links').value=u.links.map(x=>`${x.label||'Link'} | ${x.url}`).join('\n');renderAvatarPreview();openDialog('profile-dialog')}
 function renderAvatarPreview(){$('#avatar-preview').innerHTML=state.avatarDraft?`<img src="${esc(state.avatarDraft)}" alt="Preview">`:'＋';$('#avatar-preview').style.setProperty('--accent',$('#profile-accent')?.value||state.user.accent)}
 function readAvatar(e){const file=e.target.files[0];if(!file)return;if(file.size>450000){toast('Choose an image under 450 KB.','error');e.target.value='';return}const reader=new FileReader();reader.onload=()=>{state.avatarDraft=reader.result;renderAvatarPreview()};reader.readAsDataURL(file)}
-async function saveProfile(e){e.preventDefault();const links=$('#profile-links').value.split(/\n+/).map(url=>url.trim()).filter(Boolean).map(url=>({label:'Link',url}));const payload={name:$('#profile-name').value,username:$('#profile-username').value,bio:$('#profile-bio').value,department:$('#profile-department').value,year:$('#profile-year').value,pronouns:$('#profile-pronouns').value,location:$('#profile-location').value,avatar:state.avatarDraft,accent:$('#profile-accent').value,profileVisibility:$('#profile-visibility').value,interests:$('#profile-interests').value.split(',').map(x=>x.trim()).filter(Boolean),links};try{const r=await api('/api/profile',{method:'PATCH',body:JSON.stringify(payload)});state.user=r.user;closeDialog('profile-dialog');await refresh(false);navigate('profile');toast('Profile updated.')}catch(err){toast(err.message,'error')}}
+function parseProfileLinks(text){return text.split(/\n+/).map(line=>line.trim()).filter(Boolean).map(line=>{const parts=line.split('|');if(parts.length>1)return {label:parts.shift().trim()||'Link',url:parts.join('|').trim()};return {label:'Link',url:line}})}
+async function saveProfile(e){e.preventDefault();const payload={name:$('#profile-name').value,username:$('#profile-username').value,bio:$('#profile-bio').value,department:$('#profile-department').value,year:$('#profile-year').value,pronouns:$('#profile-pronouns').value,location:$('#profile-location').value,avatar:state.avatarDraft,accent:$('#profile-accent').value,profileVisibility:$('#profile-visibility').value,interests:$('#profile-interests').value.split(',').map(x=>x.trim()).filter(Boolean),links:parseProfileLinks($('#profile-links').value)};try{const r=await api('/api/profile',{method:'PATCH',body:JSON.stringify(payload)});state.user=r.user;closeDialog('profile-dialog');await refresh(false);await renderProfile(state.user.username);toast('Profile updated.')}catch(err){toast(err.message,'error')}}
 async function submitIssue(e){e.preventDefault();try{await api('/api/issues',{method:'POST',body:JSON.stringify({subject:$('#issue-subject').value,category:$('#issue-category').value,description:$('#issue-description').value})});e.target.reset();await loadIssues();toast('Issue saved and sent to management.')}catch(err){toast(err.message,'error')}}
 async function saveIssue(b){const card=b.closest('.ticket');try{await api(`/api/issues/${card.dataset.issue}`,{method:'PATCH',body:JSON.stringify({status:$('.issue-status',card).value,adminNote:$('.issue-note',card).value})});await loadIssues();toast('Issue updated.')}catch(err){toast(err.message,'error')}}
+async function replyIssue(b){const card=b.closest('.ticket'),input=$('.issue-reply',card),visibility=$('.issue-reply-visibility',card)?.value||'public';if(!input.value.trim())return;try{await api(`/api/issues/${card.dataset.issue}/messages`,{method:'POST',body:JSON.stringify({body:input.value,visibility})});await loadIssues();toast('Reply added.')}catch(err){toast(err.message,'error')}}
+async function changeRole(select){const previous=select.dataset.currentRole;try{await api(`/api/admin/users/${select.dataset.roleUser}/role`,{method:'PATCH',body:JSON.stringify({role:select.value})});select.dataset.currentRole=select.value;await renderAdmin();toast('Role updated.')}catch(err){select.value=previous;toast(err.message,'error')}}
 
 init();
