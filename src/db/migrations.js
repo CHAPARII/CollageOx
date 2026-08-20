@@ -64,6 +64,38 @@ CREATE INDEX IF NOT EXISTS idx_saved_posts_user ON saved_posts(user_id,created_a
 CREATE INDEX IF NOT EXISTS idx_issue_messages_issue ON issue_messages(issue_id,created_at);
 CREATE INDEX IF NOT EXISTS idx_role_audit_user ON role_audit(user_id,created_at DESC);
 `
+  },
+  {
+    version: 3,
+    name: 'stability_and_core_features',
+    sql: `
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL,
+  entity_id TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  read_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  review_note TEXT NOT NULL DEFAULT '',
+  reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id,read_at,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_target ON reports(target_type,target_id);
+`
   }
 ];
 

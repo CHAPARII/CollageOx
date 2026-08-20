@@ -16,4 +16,4 @@ ENV HOST=0.0.0.0
 EXPOSE 3000
 
 USER node
-CMD ["node", "server.js"]
+CMD ["node", "-r", "./src/runtime-enhancements.js", "-r", "./src/static-enhancements.js", "server.js"]
