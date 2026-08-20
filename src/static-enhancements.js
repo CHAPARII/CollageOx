@@ -10,7 +10,7 @@ function enhancedIndex() {
   return source
     .replace('/styles.css?v=3', '/styles.css?v=3&build=pr8')
     .replace('/app.js?v=3', '/app.js?v=3&build=pr8')
-    .replace('</head>', '  <link rel="stylesheet" href="/enhancements.css?v=1">\n  <link rel="stylesheet" href="/pr8.css?v=1">\n  <link rel="stylesheet" href="/pr9-cleanup.css?v=1">\n</head>')
+    .replace('</head>', '  <link rel="stylesheet" href="/enhancements.css?v=1">\n  <link rel="stylesheet" href="/pr8.css?v=1">\n  <link rel="stylesheet" href="/pr9-cleanup.css?v=2">\n</head>')
     .replace('</body>', '  <script src="/enhancements.js?v=1" defer></script>\n  <script src="/pr8.js?v=1" defer></script>\n  <script src="/pr8-fixes.js?v=1" defer></script>\n  <script src="/pr8-complete.js?v=1" defer></script>\n  <script src="/pr9-cleanup.js?v=1" defer></script>\n</body>');
 }
 

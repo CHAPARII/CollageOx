@@ -8,7 +8,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('production shell loads PR9 cleanup assets', () => {
   const source = read('src/static-enhancements.js');
-  assert.match(source, /pr9-cleanup\.css\?v=1/);
+  assert.match(source, /pr9-cleanup\.css\?v=2/);
   assert.match(source, /pr9-cleanup\.js\?v=1/);
 });
 
@@ -39,13 +39,15 @@ test('desktop sidebar can scroll independently', () => {
 
 test('people directory search keeps typed text visible on the white field', () => {
   const css = read('public/pr9-cleanup.css');
-  assert.match(css, /\.people-search input\s*\{[^}]*color\s*:\s*var\(--ink\)/);
-  assert.match(css, /caret-color\s*:\s*var\(--ink\)/);
+  assert.match(css, /#people-q[^\{]*\{[^}]*color\s*:\s*#171814\s*!important/);
+  assert.match(css, /#people-q[^\{]*\{[^}]*-webkit-text-fill-color\s*:\s*#171814\s*!important/);
+  assert.match(css, /#people-q[^\{]*\{[^}]*caret-color\s*:\s*#171814\s*!important/);
 });
 
-test('service worker caches cleanup assets and no longer routes DM pushes to Messages', () => {
+test('service worker forces a fresh cleanup stylesheet after the visibility fix', () => {
   const source = read('public/sw.js');
-  assert.match(source, /pr9-cleanup\.css\?v=1/);
+  assert.match(source, /collegeox-v3-pr9-v2/);
+  assert.match(source, /pr9-cleanup\.css\?v=2/);
   assert.match(source, /pr9-cleanup\.js\?v=1/);
   assert.doesNotMatch(source, /dm_message'\) return '\/#messages'/);
 });
