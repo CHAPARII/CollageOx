@@ -39,8 +39,9 @@ test('desktop sidebar can scroll independently', () => {
 
 test('people directory search keeps typed text visible on the white field', () => {
   const css = read('public/pr9-cleanup.css');
-  assert.match(css, /\.people-search input\s*\{[^}]*color\s*:\s*var\(--ink\)/);
-  assert.match(css, /caret-color\s*:\s*var\(--ink\)/);
+  assert.match(css, /#people-q[^\{]*\{[^}]*color\s*:\s*#171814\s*!important/);
+  assert.match(css, /#people-q[^\{]*\{[^}]*-webkit-text-fill-color\s*:\s*#171814\s*!important/);
+  assert.match(css, /#people-q[^\{]*\{[^}]*caret-color\s*:\s*#171814\s*!important/);
 });
 
 test('service worker forces a fresh cleanup stylesheet after the visibility fix', () => {
