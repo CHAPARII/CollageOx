@@ -1,0 +1,227 @@
+/* Readable social-media typography layer. Loaded last to preserve the existing visual system. */
+body {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.auth-form-card {
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
+}
+
+.kicker,
+.nav-label,
+.route-title span {
+  font-size: 11px;
+}
+
+.button,
+.text-button,
+.auth-tabs button {
+  font-size: 14px;
+}
+
+label,
+.pr8-form label {
+  font-size: 13px;
+}
+
+input,
+textarea,
+select,
+.global-search input,
+.comment-form input,
+.ticket select,
+.ticket textarea {
+  font-size: 16px;
+}
+
+.auth-form-card > div > p,
+.page-head p,
+.auth-art > small {
+  font-size: 15px;
+}
+
+.password-field button,
+.terms {
+  font-size: 12px;
+}
+
+.sidebar nav button {
+  font-size: 14px;
+}
+
+.route-title b {
+  font-size: 21px;
+}
+
+.global-search kbd,
+.ai-status small,
+.account-chip span {
+  font-size: 11px;
+}
+
+.ai-status b,
+.account-chip b {
+  font-size: 13px;
+}
+
+.bottom-nav button {
+  font-size: 11px;
+}
+
+.person-row b,
+.post-author b,
+.rail-title b,
+.notice-mini b {
+  font-size: 14px;
+}
+
+.person-row span,
+.post-author span,
+.person-meta,
+.post-kind,
+.live-label,
+.role-badge,
+.pill,
+.status-pill,
+.tag {
+  font-size: 12px;
+}
+
+.quick-compose > button {
+  font-size: 15px;
+}
+
+.feed-controls button,
+.post-actions button,
+.entity-actions .button,
+.rail-title button {
+  font-size: 13px;
+}
+
+.post-body {
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.comment p,
+.person-card p,
+.entity-card p,
+.announcement p,
+.ticket p,
+.ai-card p,
+.empty p,
+.confirm-dialog p,
+.admin-banner p,
+.admin-report p,
+.account-settings p,
+.enh-dialog-copy {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.counter span,
+.notice-mini span,
+.entity-foot span,
+.entity-meta,
+.announcement time,
+.ticket small,
+.metric span,
+.dialog-card footer > span,
+.create-grid span,
+.ai-composer span,
+.avatar-editor span,
+.club-chat-message header span,
+.admin-user span,
+.admin-report span,
+.admin-report small,
+.audit-row span,
+.audit-row small,
+.notification-row span,
+.enh-muted,
+.enh-error {
+  font-size: 12px;
+}
+
+.profile-name span {
+  font-size: 14px;
+}
+
+.profile-bio {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.profile-details,
+.profile-links a,
+.profile-stats span {
+  font-size: 13px;
+}
+
+.announcement h3,
+.ticket h3,
+.admin-card h3 {
+  font-size: 15px;
+}
+
+.admin-user b,
+.admin-report b,
+.notification-row b,
+.avatar-editor b,
+.create-grid b {
+  font-size: 14px;
+}
+
+.post-types button,
+.file-label,
+.ai-composer button {
+  font-size: 12px;
+}
+
+.club-chat-message header b {
+  font-size: 13px;
+}
+
+.club-chat-message p {
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.club-chat-empty p,
+.toast {
+  font-size: 13px;
+}
+
+.pr8-muted,
+.pr8-search-result span {
+  font-size: 14px;
+}
+
+.pr8-dm-item .meta span,
+.pr8-badge,
+.pr8-presence,
+.pr8-file-note {
+  font-size: 13px;
+}
+
+.pr8-bubble small,
+.pr8-nav-count,
+.pr8-event-dot {
+  font-size: 12px;
+}
+
+@media (max-width: 530px) {
+  .post-body {
+    font-size: 15px;
+  }
+
+  .bottom-nav {
+    height: 68px;
+  }
+
+  .view {
+    padding-bottom: 90px;
+  }
+}
